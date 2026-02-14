@@ -3,34 +3,41 @@ import pandas as pd
 import joblib
 import os
 import requests
-from io import BytesIO
 
 st.title("Customer Churn Prediction App")
 st.write("Upload CSV to predict churn. Model will be loaded automatically.")
 
-# --- Model file paths ---
+# --- Local file paths ---
 MODEL_LOCAL = "churn_model.pkl"
 FEATURES_LOCAL = "feature_columns.pkl"
 
-# --- Google Drive direct download URLs ---
-MODEL_URL = "https://drive.google.com/uc?export=download&id=1PKiIfXEUTGrk27R5g-C3ynfrbmAcxMSQ"
-FEATURES_URL = "https://drive.google.com/uc?export=download&id=14v6PdSRDuxP-R5oisbMWvchRNfrjWTSn"
+# --- Google Drive file IDs ---
+MODEL_ID = "1PKiIfXEUTGrk27R5g-C3ynfrbmAcxMSQ"
+FEATURES_ID = "14v6PdSRDuxP-R5oisbMWvchRNfrjWTSn"
 
-# --- Function to load file locally or download ---
-def load_file(local_path, url=None):
+# --- Function to download from Google Drive ---
+def download_file(file_id, local_path):
+    url = f"https://drive.google.com/uc?export=download&id={file_id}"
+    response = requests.get(url)
+    with open(local_path, "wb") as f:
+        f.write(response.content)
+    st.success(f"Downloaded {local_path}!")
+
+# --- Function to load joblib file ---
+def load_joblib(local_path, file_id=None):
     if os.path.exists(local_path):
         return joblib.load(local_path)
-    elif url:
-        st.info(f"Downloading {local_path} from cloud...")
-        response = requests.get(url)
-        return joblib.load(BytesIO(response.content))
+    elif file_id:
+        st.info(f"Downloading {local_path} from Google Drive...")
+        download_file(file_id, local_path)
+        return joblib.load(local_path)
     else:
         st.error(f"{local_path} not found!")
         st.stop()
 
 # --- Load model and feature columns ---
-model = load_file(MODEL_LOCAL, MODEL_URL)
-feature_columns = load_file(FEATURES_LOCAL, FEATURES_URL)
+model = load_joblib(MODEL_LOCAL, MODEL_ID)
+feature_columns = load_joblib(FEATURES_LOCAL, FEATURES_ID)
 
 # --- Upload CSV for prediction ---
 uploaded_file = st.file_uploader("Choose a CSV file", type="csv")
@@ -46,7 +53,7 @@ if uploaded_file:
     
     # Make predictions
     predictions = model.predict(df_encoded)
-    prediction_prob = model.predict_proba(df_encoded)[:,1]
+    prediction_prob = model.predict_proba(df_encoded)[:, 1]
     
     # Add results to dataframe
     df['Churn Prediction'] = predictions
@@ -64,7 +71,7 @@ if uploaded_file:
         mime='text/csv',
     )
     
-    # Optional: highlight high-risk customers
+    # Highlight high-risk customers
     st.subheader("High-Risk Customers")
     high_risk = df[df['Churn Probability'] > 0.5]
     st.dataframe(high_risk.style.background_gradient(cmap='Reds'))
